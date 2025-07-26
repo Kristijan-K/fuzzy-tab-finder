@@ -1,0 +1,30 @@
+{
+  "manifest_version": 3,
+  "name": "Tab Fuzzy Finder",
+  "version": "1.0",
+  "description": "Fuzzy search through tab groups and tabs",
+  "permissions": ["tabs", "tabGroups", "activeTab", "scripting"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["src/content.js"]
+    }
+  ],
+  "action": {
+    "default_icon": {
+      "16": "icon16.png"
+    },
+    "default_title": "Tab Fuzzy Finder"
+  },
+  "commands": {
+    "toggle-fuzzy-finder": {
+      "suggested_key": {
+        "default": "Alt+Q"
+      },
+      "description": "Toggle the fuzzy finder UI"
+    }
+  }
+}
