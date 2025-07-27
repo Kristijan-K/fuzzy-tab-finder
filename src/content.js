@@ -203,10 +203,18 @@ function fuzzySearchAndDisplay(query, command) {
 
         if (match) {
           currentFilteredItems.push({ tab, match, isGroup: false });
+        } else {
+          const tabGroup = tab.groupId && allTabGroups[tab.groupId];
+          const groupTitle = tabGroup ? tabGroup.title : "";
+          matchedIndices = fuzzyMatch(query, groupTitle);
+          if (matchedIndices) {
+            match = { field: "group", indices: matchedIndices };
+            currentFilteredItems.push({ tab, match, isGroup: false });
+          }
         }
       });
     }
-    currentFilteredItems.sort((a, b) => a.tab.title.localeCompare(b.tab.title));
+    currentFilteredItems.sort((a, b) => a.tab.index - b.tab.index);
   }
 
   filteredTabs = currentFilteredItems;
