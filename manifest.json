@@ -25,6 +25,12 @@
         "default": "Alt+Q"
       },
       "description": "Toggle the fuzzy finder UI"
+    },
+    "toggle-group-finder": {
+      "suggested_key": {
+        "default": "Alt+T"
+      },
+      "description": "Toggle the group finder UI"
     }
   }
 }

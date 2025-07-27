@@ -6,7 +6,7 @@ let allTabGroups = {}; // New variable to store tab groups
 let filteredTabs = [];
 let selectedIndex = -1;
 
-function createOverlay() {
+function createOverlay(command) {
   // Remove existing overlay if any
   if (overlay) {
     overlay.remove();
@@ -37,7 +37,7 @@ function createOverlay() {
   const input = document.createElement("input");
   input.type = "text";
   input.id = "fuzzy-finder-input";
-  input.placeholder = "search tabs...";
+  input.placeholder = command === 'toggle-group-finder' ? "search tab groups or create new..." : "search tabs...";
   // Prevent browser autocompletion and suggestions
   input.autocomplete = "off";
   input.autocorrect = "off";
@@ -77,12 +77,12 @@ function createOverlay() {
       acc[group.id] = group;
       return acc;
     }, {});
-    fuzzySearchAndDisplay(""); // Display all tabs initially
+    fuzzySearchAndDisplay("", command); // Display all tabs initially
   });
 
   // Input event listener for fuzzy searching
   input.addEventListener("input", (event) => {
-    fuzzySearchAndDisplay(event.target.value);
+    fuzzySearchAndDisplay(event.target.value, command);
   });
 
   // Keyboard handling
@@ -100,18 +100,30 @@ function createOverlay() {
     } else if (event.key === "Enter") {
       event.preventDefault();
       if (selectedIndex !== -1 && filteredTabs[selectedIndex]) {
-        console.log("Enter pressed. Selected index:", selectedIndex);
-        console.log("Selected tab object:", filteredTabs[selectedIndex]);
-        console.log(
-          "Activating tab with ID:",
-          filteredTabs[selectedIndex].tab.id,
-        );
-        activateTab(filteredTabs[selectedIndex].tab.id);
-        removeOverlay();
+        const selected = filteredTabs[selectedIndex];
+        if (selected.isGroup) {
+          groupTab(selected.group.id);
+          removeOverlay();
+        } else if (selected.isNewGroupOption) {
+          groupTab(null, selected.query);
+          removeOverlay();
+        } else if (selected.isRemoveFromGroupOption) {
+          removeTabFromGroup();
+          removeOverlay();
+        } else {
+          if (command === 'toggle-group-finder') {
+            groupTab(null, selected.tab.title);
+          } else {
+            activateTab(selected.tab.id);
+          }
+          removeOverlay();
+        }
       } else {
-        console.log(
-          "Enter pressed, but no tab selected or filteredTabs is empty.",
-        );
+        const newGroupName = document.getElementById('fuzzy-finder-input').value.trim();
+        if (newGroupName) {
+          groupTab(null, newGroupName);
+          removeOverlay();
+        }
       }
     }
   }
@@ -152,39 +164,55 @@ function fuzzyMatch(pattern, text) {
   }
 }
 
-function fuzzySearchAndDisplay(query) {
-  if (!query) {
-    filteredTabs = allTabs.map((tab) => ({ tab, match: null }));
-  } else {
-    filteredTabs = [];
-    allTabs.forEach((tab) => {
-      const tabGroup = tab.groupId && allTabGroups[tab.groupId];
-      const groupTitle = tabGroup ? tabGroup.title : "";
+function fuzzySearchAndDisplay(query, command) {
+  const groups = Object.values(allTabGroups);
+  let currentFilteredItems = [];
 
-      let match = null;
-      let matchedIndices = fuzzyMatch(query, tab.title);
-      if (matchedIndices) {
-        match = { field: "title", indices: matchedIndices };
-      } else {
-        matchedIndices = fuzzyMatch(query, tab.url);
+  if (command === 'toggle-group-finder') {
+    let matchedGroups = [];
+    if (!query) {
+      matchedGroups = groups.map(g => ({ group: g, isGroup: true, match: null }));
+    } else {
+      matchedGroups = groups.filter(g => {
+        const matchedIndices = fuzzyMatch(query, g.title);
+        return matchedIndices;
+      }).map(g => ({ group: g, isGroup: true, match: { field: "title", indices: fuzzyMatch(query, g.title) } }));
+    }
+
+    matchedGroups.sort((a, b) => a.group.title.localeCompare(b.group.title));
+    currentFilteredItems = matchedGroups;
+
+    currentFilteredItems.push({ isNewGroupOption: true, query: query });
+    currentFilteredItems.push({ isRemoveFromGroupOption: true });
+
+  } else { // toggle-fuzzy-finder
+    if (!query) {
+      currentFilteredItems = allTabs.map((tab) => ({ tab, match: null, isGroup: false }));
+    } else {
+      allTabs.forEach((tab) => {
+        let match = null;
+        let matchedIndices = fuzzyMatch(query, tab.title);
         if (matchedIndices) {
-          match = { field: "url", indices: matchedIndices };
+          match = { field: "title", indices: matchedIndices };
         } else {
-          matchedIndices = fuzzyMatch(query, groupTitle);
+          matchedIndices = fuzzyMatch(query, tab.url);
           if (matchedIndices) {
-            match = { field: "group", indices: matchedIndices };
+            match = { field: "url", indices: matchedIndices };
           }
         }
-      }
 
-      if (match) {
-        filteredTabs.push({ tab, match });
-      }
-    });
+        if (match) {
+          currentFilteredItems.push({ tab, match, isGroup: false });
+        }
+      });
+    }
+    currentFilteredItems.sort((a, b) => a.tab.title.localeCompare(b.tab.title));
   }
-  console.log("Filtered tabs after search:", filteredTabs);
-  displayResults(filteredTabs);
-  selectedIndex = filteredTabs.length > 0 ? 0 : -1; // Select first item by default
+
+  filteredTabs = currentFilteredItems;
+  console.log("Filtered tabs before display:", filteredTabs, "Command:", command);
+  displayResults(filteredTabs, command);
+  selectedIndex = filteredTabs.length > 0 ? 0 : -1;
   highlightSelection();
 }
 
@@ -207,21 +235,20 @@ function highlightText(text, indices) {
   return highlightedText;
 }
 
-function displayResults(filteredTabs) {
+function displayResults(filteredItems, command) {
   const resultsContainer = document.getElementById("fuzzy-finder-results");
   resultsContainer.innerHTML = ""; // Clear previous results
 
-  if (filteredTabs.length === 0) {
+  if (filteredItems.length === 0 && !filteredItems.some(item => item.isNewGroupOption)) {
     resultsContainer.innerHTML =
-      '<div style="padding: 8px; color: #aaa;">No matching tabs found.</div>';
+      '<div style="padding: 8px; color: #aaa;">No matching tabs or groups found.</div>';
     return;
   }
 
-  filteredTabs.forEach(({ tab, match }, index) => {
-    const tabItem = document.createElement("div");
-    tabItem.classList.add("fuzzy-finder-item");
-    tabItem.dataset.tabId = tab.id;
-    tabItem.style.cssText = `
+  filteredItems.forEach((item, index) => {
+    const itemElement = document.createElement("div");
+    itemElement.classList.add("fuzzy-finder-item");
+    itemElement.style.cssText = `
       padding: 8px 12px;
       cursor: pointer;
       border-bottom: 1px solid #3a3f4b;
@@ -229,78 +256,118 @@ function displayResults(filteredTabs) {
       align-items: center;
     `;
 
-    const favicon = document.createElement("img");
-    favicon.src =
-      tab.favIconUrl ||
-      "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII="; // Default to a transparent pixel if no favicon
-    favicon.style.cssText = `
-      width: 16px;
-      height: 16px;
-      margin-right: 8px;
-      flex-shrink: 0;
-    `;
-    tabItem.appendChild(favicon);
+    if (item.isGroup) {
+      itemElement.dataset.groupId = item.group.id;
+      const groupTitle = document.createElement('div');
+      groupTitle.innerHTML = `Group: ${item.match && item.match.field === 'title' ? highlightText(item.group.title, item.match.indices) : item.group.title}`;
+      groupTitle.style.cssText = `
+        font-weight: bold;
+        color: #8be9fd;
+      `;
+      itemElement.appendChild(groupTitle);
+      itemElement.addEventListener("click", () => {
+        groupTab(item.group.id);
+        removeOverlay();
+      });
+    } else if (item.isNewGroupOption) {
+      const newGroupText = document.createElement('div');
+      newGroupText.textContent = `Create new group: "${item.query}"`;
+      newGroupText.style.cssText = `
+        font-weight: bold;
+        color: #a6e22e;
+      `;
+      itemElement.appendChild(newGroupText);
+      itemElement.addEventListener("click", () => {
+        groupTab(null, item.query);
+        removeOverlay();
+      });
+    } else if (item.isRemoveFromGroupOption) {
+      const removeText = document.createElement('div');
+      removeText.textContent = "Remove from group";
+      removeText.style.cssText = `
+        font-weight: bold;
+        color: #f92672;
+      `;
+      itemElement.appendChild(removeText);
+      itemElement.addEventListener("click", () => {
+        removeTabFromGroup();
+        removeOverlay();
+      });
+    } else {
+      itemElement.dataset.tabId = item.tab.id;
+      const favicon = document.createElement("img");
+      favicon.src =
+        item.tab.favIconUrl ||
+        "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII="; // Default to a transparent pixel if no favicon
+      favicon.style.cssText = `
+        width: 16px;
+        height: 16px;
+        margin-right: 8px;
+        flex-shrink: 0;
+      `;
+      itemElement.appendChild(favicon);
 
-    const textContent = document.createElement("div");
-    textContent.style.cssText = `
-      flex-grow: 1;
-      overflow: hidden;
-      white-space: nowrap;
-    `;
+      const textContent = document.createElement("div");
+      textContent.style.cssText = `
+        flex-grow: 1;
+        overflow: hidden;
+        white-space: nowrap;
+      `;
 
-    const title = document.createElement("div");
-    title.innerHTML =
-      match && match.field === "title"
-        ? highlightText(tab.title, match.indices)
-        : tab.title;
-    title.style.cssText = `
-      font-weight: bold;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    `;
-    textContent.appendChild(title);
-
-    const url = document.createElement("div");
-    url.innerHTML =
-      match && match.field === "url"
-        ? highlightText(tab.url, match.indices)
-        : tab.url;
-    url.style.cssText = `
-      font-size: 0.8em;
-      color: #aaa;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    `;
-    textContent.appendChild(url);
-
-    if (
-      tab.groupId &&
-      allTabGroups[tab.groupId] &&
-      allTabGroups[tab.groupId].title
-    ) {
-      const groupName = document.createElement("div");
-      const groupTitle = allTabGroups[tab.groupId].title;
-      groupName.innerHTML =
-        match && match.field === "group"
-          ? `Group: ${highlightText(groupTitle, match.indices)}`
-          : `Group: ${groupTitle}`;
-      groupName.style.cssText = `
-        font-size: 0.7em;
-        color: #888;
+      const title = document.createElement("div");
+      title.innerHTML =
+        item.match && item.match.field === "title"
+          ? highlightText(item.tab.title, item.match.indices)
+          : item.tab.title;
+      title.style.cssText = `
+        font-weight: bold;
         overflow: hidden;
         text-overflow: ellipsis;
-        margin-top: 2px;
       `;
-      textContent.appendChild(groupName);
+      textContent.appendChild(title);
+
+      const url = document.createElement("div");
+      url.innerHTML =
+        item.match && item.match.field === "url"
+          ? highlightText(item.tab.url, item.match.indices)
+          : item.tab.url;
+      url.style.cssText = `
+        font-size: 0.8em;
+        color: #aaa;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      `;
+      textContent.appendChild(url);
+
+      if (
+        item.tab.groupId &&
+        allTabGroups[item.tab.groupId] &&
+        allTabGroups[item.tab.groupId].title
+      ) {
+        const groupName = document.createElement("div");
+        const groupTitle = allTabGroups[item.tab.groupId].title;
+        groupName.innerHTML =
+          item.match && item.match.field === "group"
+            ? `Group: ${highlightText(groupTitle, item.match.indices)}`
+            : `Group: ${groupTitle}`;
+        groupName.style.cssText = `
+          font-size: 0.7em;
+          color: #888;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          margin-top: 2px;
+        `;
+        textContent.appendChild(groupName);
+      }
+
+      itemElement.appendChild(textContent);
+
+      itemElement.addEventListener("click", () => {
+        activateTab(item.tab.id);
+        removeOverlay();
+      });
     }
-
-    tabItem.appendChild(textContent);
-
-    tabItem.addEventListener("click", () => {
-      activateTab(tab.id);
-      removeOverlay();
-    });
-    resultsContainer.appendChild(tabItem);
+    resultsContainer.appendChild(itemElement);
   });
 }
 
@@ -320,11 +387,19 @@ function activateTab(tabId) {
   chrome.runtime.sendMessage({ action: "activateTab", tabId: tabId });
 }
 
-function toggleOverlay() {
+function groupTab(groupId, groupName) {
+  chrome.runtime.sendMessage({ action: "groupTab", groupId, groupName });
+}
+
+function removeTabFromGroup() {
+  chrome.runtime.sendMessage({ action: "removeTabFromGroup" });
+}
+
+function toggleOverlay(command) {
   if (overlay) {
     overlay.removeOverlay();
   } else {
-    createOverlay();
+    createOverlay(command);
   }
 }
 
@@ -332,6 +407,6 @@ function toggleOverlay() {
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   console.log("Content script received message:", message);
   if (message.action === "toggleFuzzyFinder") {
-    toggleOverlay();
+    toggleOverlay(message.command);
   }
 });
