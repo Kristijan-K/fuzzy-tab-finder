@@ -1,5 +1,3 @@
-console.log("Content script loaded");
-
 let overlay = null;
 let allTabs = [];
 let allTabGroups = {}; // New variable to store tab groups
@@ -118,21 +116,9 @@ function onKeyDown(event) {
     if (event.key === "Escape") {
       removeOverlay();
     } else if (event.key === "ArrowDown") {
-      console.log(
-        "ArrowDown pressed. Current selectedIndex:",
-        selectedIndex,
-        "filteredTabs.length:",
-        filteredTabs.length,
-      );
       selectedIndex = Math.min(selectedIndex + 1, filteredTabs.length - 1);
       highlightSelection();
     } else if (event.key === "ArrowUp") {
-      console.log(
-        "ArrowUp pressed. Current selectedIndex:",
-        selectedIndex,
-        "filteredTabs.length:",
-        filteredTabs.length,
-      );
       selectedIndex = Math.max(selectedIndex - 1, 0);
       highlightSelection();
     } else if (event.key === "Enter") {
@@ -260,12 +246,6 @@ function fuzzySearchAndDisplay(query, command) {
   }
 
   filteredTabs = currentFilteredItems;
-  console.log(
-    "Filtered tabs before display:",
-    filteredTabs,
-    "Command:",
-    command,
-  );
   displayResults(filteredTabs, command);
   selectedIndex = filteredTabs.length > 0 ? 0 : -1;
   highlightSelection();
@@ -471,7 +451,6 @@ function toggleOverlay(command) {
 
 // Listen for messages from background
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  console.log("Content script received message:", message);
   if (message.action === "toggleFuzzyFinder") {
     toggleOverlay(message.command);
   }
