@@ -5,6 +5,7 @@ let allTabs = [];
 let allTabGroups = {}; // New variable to store tab groups
 let filteredTabs = [];
 let selectedIndex = -1;
+let activeCommand = null; // New global variable to store the active command
 
 function createOverlay(command) {
   // Remove existing overlay if any
@@ -12,6 +13,8 @@ function createOverlay(command) {
     overlay.remove();
     overlay = null;
   }
+
+  activeCommand = command; // Store the active command
 
   // Create overlay div
   overlay = document.createElement("div");
@@ -37,7 +40,10 @@ function createOverlay(command) {
   const input = document.createElement("input");
   input.type = "text";
   input.id = "fuzzy-finder-input";
-  input.placeholder = command === 'toggle-group-finder' ? "search tab groups or create new..." : "search tabs...";
+  input.placeholder =
+    activeCommand === "toggle-group-finder"
+      ? "search tab groups or create new..."
+      : "search tabs...";
   // Prevent browser autocompletion and suggestions
   input.autocomplete = "off";
   input.autocorrect = "off";
@@ -77,28 +83,59 @@ function createOverlay(command) {
       acc[group.id] = group;
       return acc;
     }, {});
-    fuzzySearchAndDisplay("", command); // Display all tabs initially
+    fuzzySearchAndDisplay("", activeCommand); // Display all tabs initially
   });
 
   // Input event listener for fuzzy searching
   input.addEventListener("input", (event) => {
-    fuzzySearchAndDisplay(event.target.value, command);
+    fuzzySearchAndDisplay(event.target.value, activeCommand);
   });
 
-  // Keyboard handling
-  function onKeyDown(event) {
+  // Store removeOverlay on overlay for external access
+  overlay.removeOverlay = removeOverlay;
+}
+
+function removeOverlay() {
+  if (overlay) {
+    overlay.remove();
+    overlay = null;
+    selectedIndex = -1; // Reset selection
+  }
+}
+// Keyboard handling (moved outside createOverlay)
+function onKeyDown(event) {
+  // If the overlay is not active, do nothing.
+  if (!overlay) {
+    return;
+  }
+
+  // Check if the key is one of the special keys that control the overlay.
+  const specialKeys = ["Escape", "ArrowDown", "ArrowUp", "Enter"];
+  if (specialKeys.includes(event.key)) {
+    event.preventDefault(); // Prevent default browser actions (e.g., scrolling for arrow keys)
+    event.stopPropagation(); // Stop event from propagating further to other listeners
+
     if (event.key === "Escape") {
       removeOverlay();
     } else if (event.key === "ArrowDown") {
-      event.preventDefault();
+      console.log(
+        "ArrowDown pressed. Current selectedIndex:",
+        selectedIndex,
+        "filteredTabs.length:",
+        filteredTabs.length,
+      );
       selectedIndex = Math.min(selectedIndex + 1, filteredTabs.length - 1);
       highlightSelection();
     } else if (event.key === "ArrowUp") {
-      event.preventDefault();
+      console.log(
+        "ArrowUp pressed. Current selectedIndex:",
+        selectedIndex,
+        "filteredTabs.length:",
+        filteredTabs.length,
+      );
       selectedIndex = Math.max(selectedIndex - 1, 0);
       highlightSelection();
     } else if (event.key === "Enter") {
-      event.preventDefault();
       if (selectedIndex !== -1 && filteredTabs[selectedIndex]) {
         const selected = filteredTabs[selectedIndex];
         if (selected.isGroup) {
@@ -111,7 +148,7 @@ function createOverlay(command) {
           removeTabFromGroup();
           removeOverlay();
         } else {
-          if (command === 'toggle-group-finder') {
+          if (activeCommand === "toggle-group-finder") {
             groupTab(null, selected.tab.title);
           } else {
             activateTab(selected.tab.id);
@@ -119,7 +156,9 @@ function createOverlay(command) {
           removeOverlay();
         }
       } else {
-        const newGroupName = document.getElementById('fuzzy-finder-input').value.trim();
+        const newGroupName = document
+          .getElementById("fuzzy-finder-input")
+          .value.trim();
         if (newGroupName) {
           groupTab(null, newGroupName);
           removeOverlay();
@@ -127,22 +166,11 @@ function createOverlay(command) {
       }
     }
   }
-
-  document.addEventListener("keydown", onKeyDown);
-
-  // Remove overlay function
-  function removeOverlay() {
-    if (overlay) {
-      overlay.remove();
-      overlay = null;
-      document.removeEventListener("keydown", onKeyDown);
-      selectedIndex = -1; // Reset selection
-    }
-  }
-
-  // Store removeOverlay on overlay for external access
-  overlay.removeOverlay = removeOverlay;
+  // If it's not a special key, do nothing. Let the event propagate naturally
+  // to the input field so typing works.
 }
+
+document.addEventListener("keydown", onKeyDown, true); // Registered once
 
 function fuzzyMatch(pattern, text) {
   pattern = pattern.toLowerCase();
@@ -168,15 +196,25 @@ function fuzzySearchAndDisplay(query, command) {
   const groups = Object.values(allTabGroups);
   let currentFilteredItems = [];
 
-  if (command === 'toggle-group-finder') {
+  if (command === "toggle-group-finder") {
     let matchedGroups = [];
     if (!query) {
-      matchedGroups = groups.map(g => ({ group: g, isGroup: true, match: null }));
+      matchedGroups = groups.map((g) => ({
+        group: g,
+        isGroup: true,
+        match: null,
+      }));
     } else {
-      matchedGroups = groups.filter(g => {
-        const matchedIndices = fuzzyMatch(query, g.title);
-        return matchedIndices;
-      }).map(g => ({ group: g, isGroup: true, match: { field: "title", indices: fuzzyMatch(query, g.title) } }));
+      matchedGroups = groups
+        .filter((g) => {
+          const matchedIndices = fuzzyMatch(query, g.title);
+          return matchedIndices;
+        })
+        .map((g) => ({
+          group: g,
+          isGroup: true,
+          match: { field: "title", indices: fuzzyMatch(query, g.title) },
+        }));
     }
 
     matchedGroups.sort((a, b) => a.group.title.localeCompare(b.group.title));
@@ -184,10 +222,14 @@ function fuzzySearchAndDisplay(query, command) {
 
     currentFilteredItems.push({ isNewGroupOption: true, query: query });
     currentFilteredItems.push({ isRemoveFromGroupOption: true });
-
-  } else { // toggle-fuzzy-finder
+  } else {
+    // toggle-fuzzy-finder
     if (!query) {
-      currentFilteredItems = allTabs.map((tab) => ({ tab, match: null, isGroup: false }));
+      currentFilteredItems = allTabs.map((tab) => ({
+        tab,
+        match: null,
+        isGroup: false,
+      }));
     } else {
       allTabs.forEach((tab) => {
         let match = null;
@@ -218,10 +260,23 @@ function fuzzySearchAndDisplay(query, command) {
   }
 
   filteredTabs = currentFilteredItems;
-  console.log("Filtered tabs before display:", filteredTabs, "Command:", command);
+  console.log(
+    "Filtered tabs before display:",
+    filteredTabs,
+    "Command:",
+    command,
+  );
   displayResults(filteredTabs, command);
   selectedIndex = filteredTabs.length > 0 ? 0 : -1;
   highlightSelection();
+}
+
+function removeOverlay() {
+  if (overlay) {
+    overlay.remove();
+    overlay = null;
+    selectedIndex = -1; // Reset selection
+  }
 }
 
 function highlightText(text, indices) {
@@ -247,7 +302,10 @@ function displayResults(filteredItems, command) {
   const resultsContainer = document.getElementById("fuzzy-finder-results");
   resultsContainer.innerHTML = ""; // Clear previous results
 
-  if (filteredItems.length === 0 && !filteredItems.some(item => item.isNewGroupOption)) {
+  if (
+    filteredItems.length === 0 &&
+    !filteredItems.some((item) => item.isNewGroupOption)
+  ) {
     resultsContainer.innerHTML =
       '<div style="padding: 8px; color: #aaa;">No matching tabs or groups found.</div>';
     return;
@@ -266,8 +324,8 @@ function displayResults(filteredItems, command) {
 
     if (item.isGroup) {
       itemElement.dataset.groupId = item.group.id;
-      const groupTitle = document.createElement('div');
-      groupTitle.innerHTML = `Group: ${item.match && item.match.field === 'title' ? highlightText(item.group.title, item.match.indices) : item.group.title}`;
+      const groupTitle = document.createElement("div");
+      groupTitle.innerHTML = `Group: ${item.match && item.match.field === "title" ? highlightText(item.group.title, item.match.indices) : item.group.title}`;
       groupTitle.style.cssText = `
         font-weight: bold;
         color: #8be9fd;
@@ -278,7 +336,7 @@ function displayResults(filteredItems, command) {
         removeOverlay();
       });
     } else if (item.isNewGroupOption) {
-      const newGroupText = document.createElement('div');
+      const newGroupText = document.createElement("div");
       newGroupText.textContent = `Create new group: "${item.query}"`;
       newGroupText.style.cssText = `
         font-weight: bold;
@@ -290,7 +348,7 @@ function displayResults(filteredItems, command) {
         removeOverlay();
       });
     } else if (item.isRemoveFromGroupOption) {
-      const removeText = document.createElement('div');
+      const removeText = document.createElement("div");
       removeText.textContent = "Remove from group";
       removeText.style.cssText = `
         font-weight: bold;
