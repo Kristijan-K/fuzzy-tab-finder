@@ -301,71 +301,72 @@ function fuzzySearchAndDisplay(query, command) {
     // Always add the remove bookmark option, regardless of query
     currentFilteredItems.push({ isRemoveBookmarkOption: true });
   } else if (command === "toggle-bookmark-opener") {
-    const allBookmarkItemsAndFolders = [];
-    function traverseBookmarks(nodes, level, parentPath) {
-      nodes.forEach((node) => {
+    function buildDisplayList(nodes, query, level, parentPath) {
+      let displayList = [];
+      nodes.forEach(node => {
         const currentPath = parentPath ? `${parentPath} > ${String(node.title) || ''}` : String(node.title) || '';
         if (node.url) {
           // It's a bookmark
-          allBookmarkItemsAndFolders.push({
-            bookmark: { ...node, title: node.title || '' },
-            isBookmark: true,
-            level: level,
-            path: currentPath,
-            match: null,
-          });
+          const matchedIndicesTitle = fuzzyMatch(query, node.title || '');
+          const matchedIndicesUrl = fuzzyMatch(query, node.url);
+          const matchedIndicesPath = fuzzyMatch(query, currentPath);
+
+          if (!query || matchedIndicesTitle || matchedIndicesUrl || matchedIndicesPath) {
+            let match = null;
+            if (matchedIndicesTitle) {
+              match = { field: "title", indices: matchedIndicesTitle };
+            } else if (matchedIndicesUrl) {
+              match = { field: "url", indices: matchedIndicesUrl };
+            } else if (matchedIndicesPath) {
+              match = { field: "path", indices: matchedIndicesPath };
+            }
+            displayList.push({
+              bookmark: { ...node, title: node.title || '' },
+              isBookmark: true,
+              level: level,
+              path: currentPath,
+              match: match,
+            });
+          }
         } else if (node.children) {
           // It's a folder
           const hasTitle = String(node.title).trim() !== '';
-          if (hasTitle) { // Only add to display list if it has a title
-            allBookmarkItemsAndFolders.push({
+          const matchedIndicesTitle = fuzzyMatch(query, node.title || '');
+          const matchedIndicesPath = fuzzyMatch(query, currentPath);
+
+          // Recursively build list for children
+          const childrenDisplayList = buildDisplayList(node.children, query, level + 1, currentPath);
+
+          // Determine if folder should be expanded
+          let shouldExpand = false;
+          if (query) {
+            // If there's a query, expand if folder itself matches or any child matches
+            shouldExpand = childrenDisplayList.some(item => item.isBookmark) || matchedIndicesTitle || matchedIndicesPath;
+          } else {
+            // If no query, respect user's expandedFolders state
+            shouldExpand = expandedFolders.has(node.id);
+          }
+
+          if (hasTitle) { // Always add the folder if it has a title
+            displayList.push({
               bookmark: { ...node, title: node.title || '' },
               isFolder: true,
               level: level,
               path: currentPath,
-              match: null,
-              isExpanded: expandedFolders.has(node.id),
+              match: (matchedIndicesTitle || matchedIndicesPath) ? { field: matchedIndicesTitle ? "title" : "path", indices: matchedIndicesTitle || matchedIndicesPath } : null,
+              isExpanded: shouldExpand,
             });
           }
-          // Always traverse children if expanded, regardless of parent's title
-          if (expandedFolders.has(node.id)) {
-            traverseBookmarks(node.children, level + 1, currentPath);
+
+          if (shouldExpand) {
+            displayList = displayList.concat(childrenDisplayList);
           }
         }
       });
+      return displayList;
     }
-    traverseBookmarks(allBookmarks, 0, ""); // Start with level 0 and empty path
 
-    if (!query) {
-      currentFilteredItems = allBookmarkItemsAndFolders;
-    } else {
-      currentFilteredItems = allBookmarkItemsAndFolders.filter((item) => {
-        let match = null;
-        let matchedIndices = fuzzyMatch(query, item.bookmark.title);
-        if (matchedIndices) {
-          match = { field: "title", indices: matchedIndices };
-        } else if (item.bookmark.url) { // Only check URL if it's a bookmark
-          matchedIndices = fuzzyMatch(query, item.bookmark.url);
-          if (matchedIndices) {
-            match = { field: "url", indices: matchedIndices };
-          }
-        }
-
-        // Fuzzy match against the full path (including folder names)
-        if (!match) {
-          matchedIndices = fuzzyMatch(query, item.path);
-          if (matchedIndices) {
-            match = { field: "path", indices: matchedIndices };
-          }
-        }
-
-        if (match) {
-          item.match = match;
-          return true;
-        }
-        return false;
-      });
-    }
+    currentFilteredItems = buildDisplayList(allBookmarks, query, 0, "");
   } else {
     // toggle-fuzzy-finder
     if (!query) {
