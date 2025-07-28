@@ -152,12 +152,14 @@ function onKeyDown(event) {
       if (activeCommand === "toggle-bookmark-opener" && selectedIndex !== -1 && filteredTabs[selectedIndex] && filteredTabs[selectedIndex].isFolder) {
         const folderId = filteredTabs[selectedIndex].bookmark.id;
         expandedFolders.add(folderId);
+        previouslySelectedId = filteredTabs[selectedIndex].bookmark.id; // Store current selection
         fuzzySearchAndDisplay(document.getElementById("fuzzy-finder-input").value, activeCommand);
       }
     } else if (event.key === "ArrowLeft") {
       if (activeCommand === "toggle-bookmark-opener" && selectedIndex !== -1 && filteredTabs[selectedIndex] && filteredTabs[selectedIndex].isFolder) {
         const folderId = filteredTabs[selectedIndex].bookmark.id;
         expandedFolders.delete(folderId);
+        previouslySelectedId = filteredTabs[selectedIndex].bookmark.id; // Store current selection
         fuzzySearchAndDisplay(document.getElementById("fuzzy-finder-input").value, activeCommand);
       }
     } else if (event.key === "Enter") {

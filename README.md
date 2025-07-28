@@ -6,6 +6,9 @@ Tab Fuzzy Finder is a powerful Chrome extension that allows you to quickly searc
 - **Fuzzy Search Tabs**: Quickly find and switch to any open tab by typing a few characters from its title or URL.
 - **Tab Grouping**: Easily group your current active tab into an existing group or create a new group with a custom name.
 - **Ungroup Tab**: Remove the current active tab from its group.
+- **Bookmark Management**:
+    - **Add Current Tab to Bookmark Folder**: Quickly add the current active tab as a bookmark to an existing bookmark folder. If the bookmark already exists, it will be moved to the selected folder.
+    - **Open Bookmarks**: Search and open existing bookmarks from your Chrome bookmarks.
 
 ## Installation
 
@@ -37,10 +40,24 @@ The extension should now be installed and visible in your Chrome extensions list
 2.  Select the "Remove from group" option.
 3.  Press `Enter`. The current active tab will be removed from its group.
 
+### Adding Current Tab to Bookmark Folder
+
+1.  Open the Bookmark Folder Finder (`Alt+B`).
+2.  Search for and select an existing bookmark folder.
+3.  Press `Enter`. The current active tab will be added as a bookmark to the selected folder. If a bookmark with the same URL already exists, it will be moved to the selected folder.
+4.  To remove the current tab from bookmarks, select the "Remove from bookmarks" option and press `Enter`.
+
+### Opening Bookmarks
+
+1.  Open the Bookmark Opener (`Alt+M`).
+2.  Search for bookmarks by title or URL. You can also navigate through bookmark folders.
+3.  Use `Arrow Right` to expand a folder and `Arrow Left` to collapse it.
+4.  Press `Enter` to open the selected bookmark in a new tab.
+
 ## Customizing Keyboard Shortcuts
 
 You can change the default keyboard shortcuts for the extension:
 
 1.  Go to `chrome://extensions/shortcuts` in your Chrome browser.
 2.  Find "Tab Fuzzy Finder" in the list.
-3.  Click on the edit icon next to the desired command (`Toggle the fuzzy finder UI` or `Toggle the group finder UI`) and enter your preferred shortcut.
+3.  Click on the edit icon next to the desired command (`Toggle the fuzzy finder UI`, `Toggle the group finder UI`, `Toggle the bookmark finder UI`, or `Open bookmark from fuzzy finder`) and enter your preferred shortcut.
