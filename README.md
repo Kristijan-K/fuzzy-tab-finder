@@ -60,4 +60,4 @@ You can change the default keyboard shortcuts for the extension:
 
 1.  Go to `chrome://extensions/shortcuts` in your Chrome browser.
 2.  Find "Tab Fuzzy Finder" in the list.
-3.  Click on the edit icon next to the desired command (`Toggle the fuzzy finder UI`, `Toggle the group finder UI`, `Toggle the bookmark finder UI`, or `Open bookmark from fuzzy finder`) and enter your preferred shortcut.
+3.  Click on the edit icon next to the desired command (`Tab FF`, `Tab Group Manager`, `Bookmark Manager`, or `Bookmark FF`) and enter your preferred shortcut.

@@ -22,27 +22,28 @@
   "commands": {
     "toggle-fuzzy-finder": {
       "suggested_key": {
-        "default": "Alt+Q"
+        "default": "Ctrl+Q"
       },
-      "description": "Toggle the fuzzy finder UI"
+      "description": "Tab FF"
     },
     "toggle-group-finder": {
       "suggested_key": {
         "default": "Alt+T"
       },
-      "description": "Toggle the group finder UI"
+      "description": "Tab Group Manager"
     },
     "toggle-bookmark-finder": {
       "suggested_key": {
-        "default": "Alt+B"
+        "default": "Alt+B",
+        "mac": "Alt+B"
       },
-      "description": "Toggle the bookmark finder UI"
+      "description": "Bookmark Manager"
     },
     "toggle-bookmark-opener": {
       "suggested_key": {
         "default": "Alt+M"
       },
-      "description": "Open bookmark from fuzzy finder"
+      "description": "Bookmark FF"
     }
   }
 }
