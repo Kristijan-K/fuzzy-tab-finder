@@ -45,10 +45,10 @@ function createOverlay(command) {
     activeCommand === "toggle-group-finder"
       ? "search tab groups or create new..."
       : activeCommand === "toggle-bookmark-finder"
-      ? "search bookmark folders..."
-      : activeCommand === "toggle-bookmark-opener"
-      ? "search bookmarks..."
-      : "search tabs...";
+        ? "search bookmark folders..."
+        : activeCommand === "toggle-bookmark-opener"
+          ? "search bookmarks..."
+          : "search tabs...";
   // Prevent browser autocompletion and suggestions
   input.autocomplete = "off";
   input.autocorrect = "off";
@@ -82,13 +82,17 @@ function createOverlay(command) {
   input.focus();
 
   // Fetch all tabs and tab groups
-  if (activeCommand === "toggle-bookmark-finder" || activeCommand === "toggle-bookmark-opener") {
+  if (
+    activeCommand === "toggle-bookmark-finder" ||
+    activeCommand === "toggle-bookmark-opener"
+  ) {
     chrome.runtime.sendMessage({ action: "getAllBookmarks" }, (response) => {
       allBookmarks = response.bookmarkTreeNodes;
       expandedFolders.clear(); // Clear previous state
-      if (activeCommand === "toggle-bookmark-opener") { // Only expand all for bookmark opener
+      if (activeCommand === "toggle-bookmark-opener") {
+        // Only expand all for bookmark opener
         function expandAllFolders(nodes) {
-          nodes.forEach(node => {
+          nodes.forEach((node) => {
             if (node.children) {
               expandedFolders.add(node.id);
               expandAllFolders(node.children);
@@ -135,7 +139,14 @@ function onKeyDown(event) {
   }
 
   // Check if the key is one of the special keys that control the overlay.
-  const specialKeys = ["Escape", "ArrowDown", "ArrowUp", "Enter", "ArrowLeft", "ArrowRight"];
+  const specialKeys = [
+    "Escape",
+    "ArrowDown",
+    "ArrowUp",
+    "Enter",
+    "ArrowLeft",
+    "ArrowRight",
+  ];
   if (specialKeys.includes(event.key)) {
     event.preventDefault(); // Prevent default browser actions (e.g., scrolling for arrow keys)
     event.stopPropagation(); // Stop event from propagating further to other listeners
@@ -149,18 +160,34 @@ function onKeyDown(event) {
       selectedIndex = Math.max(selectedIndex - 1, 0);
       highlightSelection();
     } else if (event.key === "ArrowRight") {
-      if (activeCommand === "toggle-bookmark-opener" && selectedIndex !== -1 && filteredTabs[selectedIndex] && filteredTabs[selectedIndex].isFolder) {
+      if (
+        activeCommand === "toggle-bookmark-opener" &&
+        selectedIndex !== -1 &&
+        filteredTabs[selectedIndex] &&
+        filteredTabs[selectedIndex].isFolder
+      ) {
         const folderId = filteredTabs[selectedIndex].bookmark.id;
         expandedFolders.add(folderId);
         previouslySelectedId = filteredTabs[selectedIndex].bookmark.id; // Store current selection
-        fuzzySearchAndDisplay(document.getElementById("fuzzy-finder-input").value, activeCommand);
+        fuzzySearchAndDisplay(
+          document.getElementById("fuzzy-finder-input").value,
+          activeCommand,
+        );
       }
     } else if (event.key === "ArrowLeft") {
-      if (activeCommand === "toggle-bookmark-opener" && selectedIndex !== -1 && filteredTabs[selectedIndex] && filteredTabs[selectedIndex].isFolder) {
+      if (
+        activeCommand === "toggle-bookmark-opener" &&
+        selectedIndex !== -1 &&
+        filteredTabs[selectedIndex] &&
+        filteredTabs[selectedIndex].isFolder
+      ) {
         const folderId = filteredTabs[selectedIndex].bookmark.id;
         expandedFolders.delete(folderId);
         previouslySelectedId = filteredTabs[selectedIndex].bookmark.id; // Store current selection
-        fuzzySearchAndDisplay(document.getElementById("fuzzy-finder-input").value, activeCommand);
+        fuzzySearchAndDisplay(
+          document.getElementById("fuzzy-finder-input").value,
+          activeCommand,
+        );
       }
     } else if (event.key === "Enter") {
       if (selectedIndex !== -1 && filteredTabs[selectedIndex]) {
@@ -270,9 +297,10 @@ function fuzzySearchAndDisplay(query, command) {
       nodes.forEach((node) => {
         if (node.children) {
           // It's a folder
-          if (String(node.title).trim() !== '') { // Only add to display list if it has a title
+          if (String(node.title).trim() !== "") {
+            // Only add to display list if it has a title
             bookmarkFolders.push({
-              bookmark: { ...node, title: node.title || '' },
+              bookmark: { ...node, title: node.title || "" },
               isFolder: true,
               level: level,
               match: null,
@@ -303,15 +331,22 @@ function fuzzySearchAndDisplay(query, command) {
   } else if (command === "toggle-bookmark-opener") {
     function buildDisplayList(nodes, query, level, parentPath) {
       let displayList = [];
-      nodes.forEach(node => {
-        const currentPath = parentPath ? `${parentPath} > ${String(node.title) || ''}` : String(node.title) || '';
+      nodes.forEach((node) => {
+        const currentPath = parentPath
+          ? `${parentPath} > ${String(node.title) || ""}`
+          : String(node.title) || "";
         if (node.url) {
           // It's a bookmark
-          const matchedIndicesTitle = fuzzyMatch(query, node.title || '');
+          const matchedIndicesTitle = fuzzyMatch(query, node.title || "");
           const matchedIndicesUrl = fuzzyMatch(query, node.url);
           const matchedIndicesPath = fuzzyMatch(query, currentPath);
 
-          if (!query || matchedIndicesTitle || matchedIndicesUrl || matchedIndicesPath) {
+          if (
+            !query ||
+            matchedIndicesTitle ||
+            matchedIndicesUrl ||
+            matchedIndicesPath
+          ) {
             let match = null;
             if (matchedIndicesTitle) {
               match = { field: "title", indices: matchedIndicesTitle };
@@ -321,7 +356,7 @@ function fuzzySearchAndDisplay(query, command) {
               match = { field: "path", indices: matchedIndicesPath };
             }
             displayList.push({
-              bookmark: { ...node, title: node.title || '' },
+              bookmark: { ...node, title: node.title || "" },
               isBookmark: true,
               level: level,
               path: currentPath,
@@ -330,30 +365,45 @@ function fuzzySearchAndDisplay(query, command) {
           }
         } else if (node.children) {
           // It's a folder
-          const hasTitle = String(node.title).trim() !== '';
-          const matchedIndicesTitle = fuzzyMatch(query, node.title || '');
+          const hasTitle = String(node.title).trim() !== "";
+          const matchedIndicesTitle = fuzzyMatch(query, node.title || "");
           const matchedIndicesPath = fuzzyMatch(query, currentPath);
 
           // Recursively build list for children
-          const childrenDisplayList = buildDisplayList(node.children, query, level + 1, currentPath);
+          const childrenDisplayList = buildDisplayList(
+            node.children,
+            query,
+            level + 1,
+            currentPath,
+          );
 
           // Determine if folder should be expanded
           let shouldExpand = false;
           if (query) {
             // If there's a query, expand if folder itself matches or any child matches
-            shouldExpand = childrenDisplayList.some(item => item.isBookmark) || matchedIndicesTitle || matchedIndicesPath;
+            shouldExpand =
+              childrenDisplayList.some((item) => item.isBookmark) ||
+              matchedIndicesTitle ||
+              matchedIndicesPath;
           } else {
             // If no query, respect user's expandedFolders state
             shouldExpand = expandedFolders.has(node.id);
           }
 
-          if (hasTitle) { // Always add the folder if it has a title
+          if (hasTitle) {
+            // Always add the folder if it has a title
             displayList.push({
-              bookmark: { ...node, title: node.title || '' },
+              bookmark: { ...node, title: node.title || "" },
               isFolder: true,
               level: level,
               path: currentPath,
-              match: (matchedIndicesTitle || matchedIndicesPath) ? { field: matchedIndicesTitle ? "title" : "path", indices: matchedIndicesTitle || matchedIndicesPath } : null,
+              match:
+                matchedIndicesTitle || matchedIndicesPath
+                  ? {
+                      field: matchedIndicesTitle ? "title" : "path",
+                      indices: matchedIndicesTitle || matchedIndicesPath,
+                    }
+                  : null,
               isExpanded: shouldExpand,
             });
           }
@@ -408,7 +458,7 @@ function fuzzySearchAndDisplay(query, command) {
   displayResults(filteredTabs, command);
 
   if (previouslySelectedId !== null) {
-    const newIndex = filteredTabs.findIndex(item => {
+    const newIndex = filteredTabs.findIndex((item) => {
       if (item.isFolder || item.isBookmark) {
         return item.bookmark.id === previouslySelectedId;
       } else if (item.tab) {
@@ -426,8 +476,6 @@ function fuzzySearchAndDisplay(query, command) {
   }
   highlightSelection();
 }
-
-
 
 function highlightText(text, indices) {
   if (!indices || indices.length === 0) {
@@ -454,17 +502,20 @@ function displayResults(filteredItems, command) {
 
   if (
     filteredItems.length === 0 &&
-    !filteredItems.some((item) => item.isNewGroupOption || item.isRemoveBookmarkOption)
+    !filteredItems.some(
+      (item) => item.isNewGroupOption || item.isRemoveBookmarkOption,
+    )
   ) {
-    let message = 'No matching items found.';
-    if (command === 'toggle-bookmark-finder') {
-      message = 'No matching bookmark folders found.';
-    } else if (command === 'toggle-bookmark-opener') {
-      message = 'No matching bookmarks found.';
-    } else if (command === 'toggle-group-finder') {
-      message = 'No matching tabs or groups found.';
-    } else { // toggle-fuzzy-finder
-      message = 'No matching tabs found.';
+    let message = "No matching items found.";
+    if (command === "toggle-bookmark-finder") {
+      message = "No matching bookmark folders found.";
+    } else if (command === "toggle-bookmark-opener") {
+      message = "No matching bookmarks found.";
+    } else if (command === "toggle-group-finder") {
+      message = "No matching tabs or groups found.";
+    } else {
+      // toggle-fuzzy-finder
+      message = "No matching tabs found.";
     }
     resultsContainer.innerHTML = `<div style="padding: 8px; color: #aaa;">${message}</div>`;
     return;
@@ -521,10 +572,16 @@ function displayResults(filteredItems, command) {
     } else if (item.isFolder) {
       const folderName = document.createElement("div");
       const indent = "&nbsp;&nbsp;".repeat(item.level);
-      const titleHtml = item.match && item.match.field === "title" ? highlightText(item.bookmark.title || '', item.match.indices) : (item.bookmark.title || '');
-      const pathHtml = item.match && item.match.field === "path" ? highlightText(String(item.path) || '', item.match.indices) : (String(item.path) || '');
+      const titleHtml =
+        item.match && item.match.field === "title"
+          ? highlightText(item.bookmark.title || "", item.match.indices)
+          : item.bookmark.title || "";
+      const pathHtml =
+        item.match && item.match.field === "path"
+          ? highlightText(String(item.path) || "", item.match.indices)
+          : String(item.path) || "";
 
-      const expandCollapseIcon = item.isExpanded ? '▼' : '►';
+      const expandCollapseIcon = item.isExpanded ? "▼" : "►";
       folderName.innerHTML = `${indent}<span style="color: #f1fa8c;">${expandCollapseIcon} ${titleHtml}</span>`;
       if (command === "toggle-bookmark-opener" && item.level > 0) {
         folderName.innerHTML += `<div style="font-size: 0.7em; color: #888;">${indent}${pathHtml}</div>`;
@@ -541,12 +598,15 @@ function displayResults(filteredItems, command) {
           } else {
             expandedFolders.add(folderId);
           }
-          fuzzySearchAndDisplay(document.getElementById("fuzzy-finder-input").value, activeCommand);
+          fuzzySearchAndDisplay(
+            document.getElementById("fuzzy-finder-input").value,
+            activeCommand,
+          );
         } else if (command === "toggle-bookmark-finder") {
           addBookmark(item.bookmark.id);
           removeOverlay();
         } else if (command === "toggle-bookmark-opener") {
-          } else if (command === "toggle-bookmark-opener") {
+        } else if (command === "toggle-bookmark-opener") {
           openBookmark(item.bookmark.url);
           removeOverlay();
         }
@@ -576,7 +636,6 @@ function displayResults(filteredItems, command) {
         flex-shrink: 0;
       `;
       itemElement.appendChild(favicon);
-      
 
       const textContent = document.createElement("div");
       textContent.style.cssText = `
@@ -589,9 +648,10 @@ function displayResults(filteredItems, command) {
 
       const title = document.createElement("div");
       title.innerHTML =
-        `${indent}` + (item.match && item.match.field === "title"
-          ? highlightText(item.bookmark.title || '', item.match.indices)
-          : (item.bookmark.title || ''));
+        `${indent}` +
+        (item.match && item.match.field === "title"
+          ? highlightText(item.bookmark.title || "", item.match.indices)
+          : item.bookmark.title || "");
       title.style.cssText = `
         font-weight: bold;
         overflow: hidden;
@@ -601,7 +661,8 @@ function displayResults(filteredItems, command) {
 
       const url = document.createElement("div");
       url.innerHTML =
-        `${indent}` + (item.match && item.match.field === "url"
+        `${indent}` +
+        (item.match && item.match.field === "url"
           ? highlightText(item.bookmark.url, item.match.indices)
           : item.bookmark.url);
       url.style.cssText = `
@@ -613,7 +674,7 @@ function displayResults(filteredItems, command) {
       textContent.appendChild(url);
 
       const path = document.createElement("div");
-      path.innerHTML = `${indent}<span style="font-size: 0.7em; color: #888;">${item.match && item.match.field === "path" ? highlightText(String(item.path) || '', item.match.indices) : (String(item.path) || '')}</span>`;
+      path.innerHTML = `${indent}<span style="font-size: 0.7em; color: #888;">${item.match && item.match.field === "path" ? highlightText(String(item.path) || "", item.match.indices) : String(item.path) || ""}</span>`;
       path.style.cssText = `
         overflow: hidden;
         text-overflow: ellipsis;
