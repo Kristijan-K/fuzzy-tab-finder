@@ -543,27 +543,23 @@ function displayResults(filteredItems, command) {
           addBookmark(item.bookmark.id);
           removeOverlay();
         } else if (command === "toggle-bookmark-opener") {
+          } else if (command === "toggle-bookmark-opener") {
           openBookmark(item.bookmark.url);
           removeOverlay();
         }
       });
     } else if (item.isRemoveBookmarkOption) {
-      // Only show this option if there are actual bookmark folders to select from
-      if (command === "toggle-bookmark-finder" && filteredItems.some(fi => fi.isFolder)) {
-        const removeText = document.createElement("div");
-        removeText.textContent = "Remove from bookmarks";
-        removeText.style.cssText = `
-          font-weight: bold;
-          color: #f92672;
-        `;
-        itemElement.appendChild(removeText);
-        itemElement.addEventListener("click", () => {
-          removeBookmark();
-          removeOverlay();
-        });
-      } else {
-        return; // Don't display this item if no folders are present
-      }
+      const removeText = document.createElement("div");
+      removeText.textContent = "Remove from bookmarks";
+      removeText.style.cssText = `
+        font-weight: bold;
+        color: #f92672;
+      `;
+      itemElement.appendChild(removeText);
+      itemElement.addEventListener("click", () => {
+        removeBookmark();
+        removeOverlay();
+      });
     } else if (item.isBookmark) {
       itemElement.dataset.bookmarkId = item.bookmark.id;
       const favicon = document.createElement("img");
@@ -577,6 +573,7 @@ function displayResults(filteredItems, command) {
         flex-shrink: 0;
       `;
       itemElement.appendChild(favicon);
+      
 
       const textContent = document.createElement("div");
       textContent.style.cssText = `
