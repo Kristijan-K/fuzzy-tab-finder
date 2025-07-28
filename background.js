@@ -1,5 +1,5 @@
 chrome.commands.onCommand.addListener((command) => {
-  if (command === "toggle-fuzzy-finder" || command === "toggle-group-finder") {
+  if (command === "toggle-fuzzy-finder" || command === "toggle-group-finder" || command === "toggle-bookmark-finder" || command === "toggle-bookmark-opener") {
     chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
       if (tabs[0]) {
         chrome.tabs.sendMessage(tabs[0].id, {
@@ -28,6 +28,42 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       sendResponse({ tabs, tabGroups });
     });
     return true; // Indicates that sendResponse will be called asynchronously
+  } else if (message.action === "getAllBookmarks") {
+    chrome.bookmarks.getTree((bookmarkTreeNodes) => {
+      sendResponse({ bookmarkTreeNodes });
+    });
+    return true; // Indicates that sendResponse will be called asynchronously
+  } else if (message.action === "addBookmark") {
+    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+      if (tabs[0]) {
+        const { title, url } = tabs[0];
+        chrome.bookmarks.search({ url }, (results) => {
+          if (results.length > 0) {
+            // Bookmark already exists, remove it from other folders
+            results.forEach((bookmark) => {
+              if (bookmark.parentId !== message.parentId) {
+                chrome.bookmarks.remove(bookmark.id);
+              }
+            });
+          }
+          // Add or move the bookmark to the target folder
+          chrome.bookmarks.create({ parentId: message.parentId, title, url });
+        });
+      }
+    });
+  } else if (message.action === "removeBookmark") {
+    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+      if (tabs[0]) {
+        const { url } = tabs[0];
+        chrome.bookmarks.search({ url }, (results) => {
+          results.forEach((bookmark) => {
+            chrome.bookmarks.remove(bookmark.id);
+          });
+        });
+      }
+    });
+  } else if (message.action === "openBookmark") {
+    chrome.tabs.create({ url: message.url });
   } else if (message.action === "groupTab") {
     chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
       if (tabs[0]) {

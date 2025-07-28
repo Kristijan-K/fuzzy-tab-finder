@@ -1,8 +1,11 @@
 let overlay = null;
 let allTabs = [];
 let allTabGroups = {}; // New variable to store tab groups
+let allBookmarks = []; // New variable to store bookmark folders
+let expandedFolders = new Set(); // To keep track of expanded folders
 let filteredTabs = [];
 let selectedIndex = -1;
+let previouslySelectedId = null; // To remember the last selected item
 let activeCommand = null; // New global variable to store the active command
 
 function createOverlay(command) {
@@ -41,6 +44,10 @@ function createOverlay(command) {
   input.placeholder =
     activeCommand === "toggle-group-finder"
       ? "search tab groups or create new..."
+      : activeCommand === "toggle-bookmark-finder"
+      ? "search bookmark folders..."
+      : activeCommand === "toggle-bookmark-opener"
+      ? "search bookmarks..."
       : "search tabs...";
   // Prevent browser autocompletion and suggestions
   input.autocomplete = "off";
@@ -75,14 +82,33 @@ function createOverlay(command) {
   input.focus();
 
   // Fetch all tabs and tab groups
-  chrome.runtime.sendMessage({ action: "getAllTabs" }, (response) => {
-    allTabs = response.tabs;
-    allTabGroups = response.tabGroups.reduce((acc, group) => {
-      acc[group.id] = group;
-      return acc;
-    }, {});
-    fuzzySearchAndDisplay("", activeCommand); // Display all tabs initially
-  });
+  if (activeCommand === "toggle-bookmark-finder" || activeCommand === "toggle-bookmark-opener") {
+    chrome.runtime.sendMessage({ action: "getAllBookmarks" }, (response) => {
+      allBookmarks = response.bookmarkTreeNodes;
+      expandedFolders.clear(); // Clear previous state
+      if (activeCommand === "toggle-bookmark-opener") { // Only expand all for bookmark opener
+        function expandAllFolders(nodes) {
+          nodes.forEach(node => {
+            if (node.children) {
+              expandedFolders.add(node.id);
+              expandAllFolders(node.children);
+            }
+          });
+        }
+        expandAllFolders(allBookmarks);
+      }
+      fuzzySearchAndDisplay("", activeCommand); // Display all bookmarks initially
+    });
+  } else {
+    chrome.runtime.sendMessage({ action: "getAllTabs" }, (response) => {
+      allTabs = response.tabs;
+      allTabGroups = response.tabGroups.reduce((acc, group) => {
+        acc[group.id] = group;
+        return acc;
+      }, {});
+      fuzzySearchAndDisplay("", activeCommand); // Display all tabs initially
+    });
+  }
 
   // Input event listener for fuzzy searching
   input.addEventListener("input", (event) => {
@@ -98,6 +124,7 @@ function removeOverlay() {
     overlay.remove();
     overlay = null;
     selectedIndex = -1; // Reset selection
+    previouslySelectedId = null; // Reset previously selected ID
   }
 }
 // Keyboard handling (moved outside createOverlay)
@@ -108,7 +135,7 @@ function onKeyDown(event) {
   }
 
   // Check if the key is one of the special keys that control the overlay.
-  const specialKeys = ["Escape", "ArrowDown", "ArrowUp", "Enter"];
+  const specialKeys = ["Escape", "ArrowDown", "ArrowUp", "Enter", "ArrowLeft", "ArrowRight"];
   if (specialKeys.includes(event.key)) {
     event.preventDefault(); // Prevent default browser actions (e.g., scrolling for arrow keys)
     event.stopPropagation(); // Stop event from propagating further to other listeners
@@ -121,10 +148,37 @@ function onKeyDown(event) {
     } else if (event.key === "ArrowUp") {
       selectedIndex = Math.max(selectedIndex - 1, 0);
       highlightSelection();
+    } else if (event.key === "ArrowRight") {
+      if (activeCommand === "toggle-bookmark-opener" && selectedIndex !== -1 && filteredTabs[selectedIndex] && filteredTabs[selectedIndex].isFolder) {
+        const folderId = filteredTabs[selectedIndex].bookmark.id;
+        expandedFolders.add(folderId);
+        fuzzySearchAndDisplay(document.getElementById("fuzzy-finder-input").value, activeCommand);
+      }
+    } else if (event.key === "ArrowLeft") {
+      if (activeCommand === "toggle-bookmark-opener" && selectedIndex !== -1 && filteredTabs[selectedIndex] && filteredTabs[selectedIndex].isFolder) {
+        const folderId = filteredTabs[selectedIndex].bookmark.id;
+        expandedFolders.delete(folderId);
+        fuzzySearchAndDisplay(document.getElementById("fuzzy-finder-input").value, activeCommand);
+      }
     } else if (event.key === "Enter") {
       if (selectedIndex !== -1 && filteredTabs[selectedIndex]) {
         const selected = filteredTabs[selectedIndex];
-        if (selected.isGroup) {
+        if (selected.isFolder || selected.isBookmark) {
+          previouslySelectedId = selected.bookmark.id;
+        } else if (selected.tab) {
+          previouslySelectedId = selected.tab.id;
+        }
+        if (activeCommand === "toggle-bookmark-finder") {
+          if (selected.isRemoveBookmarkOption) {
+            removeBookmark();
+          } else {
+            addBookmark(selected.bookmark.id);
+          }
+          removeOverlay();
+        } else if (activeCommand === "toggle-bookmark-opener") {
+          openBookmark(selected.bookmark.url);
+          removeOverlay();
+        } else if (selected.isGroup) {
           groupTab(selected.group.id);
           removeOverlay();
         } else if (selected.isNewGroupOption) {
@@ -141,7 +195,7 @@ function onKeyDown(event) {
           }
           removeOverlay();
         }
-      } else {
+      } else if (activeCommand === "toggle-group-finder") {
         const newGroupName = document
           .getElementById("fuzzy-finder-input")
           .value.trim();
@@ -208,6 +262,108 @@ function fuzzySearchAndDisplay(query, command) {
 
     currentFilteredItems.push({ isNewGroupOption: true, query: query });
     currentFilteredItems.push({ isRemoveFromGroupOption: true });
+  } else if (command === "toggle-bookmark-finder") {
+    const bookmarkFolders = [];
+    function traverseBookmarks(nodes, level) {
+      nodes.forEach((node) => {
+        if (node.children) {
+          // It's a folder
+          if (String(node.title).trim() !== '') { // Only add to display list if it has a title
+            bookmarkFolders.push({
+              bookmark: { ...node, title: node.title || '' },
+              isFolder: true,
+              level: level,
+              match: null,
+              isExpanded: false, // Always false for alt+b as expand/collapse is disabled
+            });
+          }
+          // Always traverse children for alt+b to find all titled folders
+          traverseBookmarks(node.children, level + 1);
+        }
+      });
+    }
+    traverseBookmarks(allBookmarks, 0);
+
+    if (!query) {
+      currentFilteredItems = bookmarkFolders;
+    } else {
+      currentFilteredItems = bookmarkFolders.filter((item) => {
+        const matchedIndices = fuzzyMatch(query, item.bookmark.title);
+        if (matchedIndices) {
+          item.match = { field: "title", indices: matchedIndices };
+          return true;
+        }
+        return false;
+      });
+    }
+    // Always add the remove bookmark option, regardless of query
+    currentFilteredItems.push({ isRemoveBookmarkOption: true });
+  } else if (command === "toggle-bookmark-opener") {
+    const allBookmarkItemsAndFolders = [];
+    function traverseBookmarks(nodes, level, parentPath) {
+      nodes.forEach((node) => {
+        const currentPath = parentPath ? `${parentPath} > ${String(node.title) || ''}` : String(node.title) || '';
+        if (node.url) {
+          // It's a bookmark
+          allBookmarkItemsAndFolders.push({
+            bookmark: { ...node, title: node.title || '' },
+            isBookmark: true,
+            level: level,
+            path: currentPath,
+            match: null,
+          });
+        } else if (node.children) {
+          // It's a folder
+          const hasTitle = String(node.title).trim() !== '';
+          if (hasTitle) { // Only add to display list if it has a title
+            allBookmarkItemsAndFolders.push({
+              bookmark: { ...node, title: node.title || '' },
+              isFolder: true,
+              level: level,
+              path: currentPath,
+              match: null,
+              isExpanded: expandedFolders.has(node.id),
+            });
+          }
+          // Always traverse children if expanded, regardless of parent's title
+          if (expandedFolders.has(node.id)) {
+            traverseBookmarks(node.children, level + 1, currentPath);
+          }
+        }
+      });
+    }
+    traverseBookmarks(allBookmarks, 0, ""); // Start with level 0 and empty path
+
+    if (!query) {
+      currentFilteredItems = allBookmarkItemsAndFolders;
+    } else {
+      currentFilteredItems = allBookmarkItemsAndFolders.filter((item) => {
+        let match = null;
+        let matchedIndices = fuzzyMatch(query, item.bookmark.title);
+        if (matchedIndices) {
+          match = { field: "title", indices: matchedIndices };
+        } else if (item.bookmark.url) { // Only check URL if it's a bookmark
+          matchedIndices = fuzzyMatch(query, item.bookmark.url);
+          if (matchedIndices) {
+            match = { field: "url", indices: matchedIndices };
+          }
+        }
+
+        // Fuzzy match against the full path (including folder names)
+        if (!match) {
+          matchedIndices = fuzzyMatch(query, item.path);
+          if (matchedIndices) {
+            match = { field: "path", indices: matchedIndices };
+          }
+        }
+
+        if (match) {
+          item.match = match;
+          return true;
+        }
+        return false;
+      });
+    }
   } else {
     // toggle-fuzzy-finder
     if (!query) {
@@ -247,17 +403,28 @@ function fuzzySearchAndDisplay(query, command) {
 
   filteredTabs = currentFilteredItems;
   displayResults(filteredTabs, command);
-  selectedIndex = filteredTabs.length > 0 ? 0 : -1;
+
+  if (previouslySelectedId !== null) {
+    const newIndex = filteredTabs.findIndex(item => {
+      if (item.isFolder || item.isBookmark) {
+        return item.bookmark.id === previouslySelectedId;
+      } else if (item.tab) {
+        return item.tab.id === previouslySelectedId;
+      }
+      return false;
+    });
+    if (newIndex !== -1) {
+      selectedIndex = newIndex;
+    } else {
+      selectedIndex = filteredTabs.length > 0 ? 0 : -1;
+    }
+  } else {
+    selectedIndex = filteredTabs.length > 0 ? 0 : -1;
+  }
   highlightSelection();
 }
 
-function removeOverlay() {
-  if (overlay) {
-    overlay.remove();
-    overlay = null;
-    selectedIndex = -1; // Reset selection
-  }
-}
+
 
 function highlightText(text, indices) {
   if (!indices || indices.length === 0) {
@@ -284,10 +451,19 @@ function displayResults(filteredItems, command) {
 
   if (
     filteredItems.length === 0 &&
-    !filteredItems.some((item) => item.isNewGroupOption)
+    !filteredItems.some((item) => item.isNewGroupOption || item.isRemoveBookmarkOption)
   ) {
-    resultsContainer.innerHTML =
-      '<div style="padding: 8px; color: #aaa;">No matching tabs or groups found.</div>';
+    let message = 'No matching items found.';
+    if (command === 'toggle-bookmark-finder') {
+      message = 'No matching bookmark folders found.';
+    } else if (command === 'toggle-bookmark-opener') {
+      message = 'No matching bookmarks found.';
+    } else if (command === 'toggle-group-finder') {
+      message = 'No matching tabs or groups found.';
+    } else { // toggle-fuzzy-finder
+      message = 'No matching tabs found.';
+    }
+    resultsContainer.innerHTML = `<div style="padding: 8px; color: #aaa;">${message}</div>`;
     return;
   }
 
@@ -337,6 +513,117 @@ function displayResults(filteredItems, command) {
       itemElement.appendChild(removeText);
       itemElement.addEventListener("click", () => {
         removeTabFromGroup();
+        removeOverlay();
+      });
+    } else if (item.isFolder) {
+      const folderName = document.createElement("div");
+      const indent = "&nbsp;&nbsp;".repeat(item.level);
+      const titleHtml = item.match && item.match.field === "title" ? highlightText(item.bookmark.title || '', item.match.indices) : (item.bookmark.title || '');
+      const pathHtml = item.match && item.match.field === "path" ? highlightText(String(item.path) || '', item.match.indices) : (String(item.path) || '');
+
+      const expandCollapseIcon = item.isExpanded ? '▼' : '►';
+      folderName.innerHTML = `${indent}<span style="color: #f1fa8c;">${expandCollapseIcon} ${titleHtml}</span>`;
+      if (command === "toggle-bookmark-opener" && item.level > 0) {
+        folderName.innerHTML += `<div style="font-size: 0.7em; color: #888;">${indent}${pathHtml}</div>`;
+      }
+      folderName.style.cssText = `
+        font-weight: bold;
+      `;
+      itemElement.appendChild(folderName);
+      itemElement.addEventListener("click", () => {
+        if (command === "toggle-bookmark-opener" && item.isFolder) {
+          const folderId = item.bookmark.id;
+          if (expandedFolders.has(folderId)) {
+            expandedFolders.delete(folderId);
+          } else {
+            expandedFolders.add(folderId);
+          }
+          fuzzySearchAndDisplay(document.getElementById("fuzzy-finder-input").value, activeCommand);
+        } else if (command === "toggle-bookmark-finder") {
+          addBookmark(item.bookmark.id);
+          removeOverlay();
+        } else if (command === "toggle-bookmark-opener") {
+          openBookmark(item.bookmark.url);
+          removeOverlay();
+        }
+      });
+    } else if (item.isRemoveBookmarkOption) {
+      // Only show this option if there are actual bookmark folders to select from
+      if (command === "toggle-bookmark-finder" && filteredItems.some(fi => fi.isFolder)) {
+        const removeText = document.createElement("div");
+        removeText.textContent = "Remove from bookmarks";
+        removeText.style.cssText = `
+          font-weight: bold;
+          color: #f92672;
+        `;
+        itemElement.appendChild(removeText);
+        itemElement.addEventListener("click", () => {
+          removeBookmark();
+          removeOverlay();
+        });
+      } else {
+        return; // Don't display this item if no folders are present
+      }
+    } else if (item.isBookmark) {
+      itemElement.dataset.bookmarkId = item.bookmark.id;
+      const favicon = document.createElement("img");
+      favicon.src =
+        item.bookmark.favIconUrl ||
+        "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII="; // Default to a transparent pixel if no favicon
+      favicon.style.cssText = `
+        width: 16px;
+        height: 16px;
+        margin-right: 8px;
+        flex-shrink: 0;
+      `;
+      itemElement.appendChild(favicon);
+
+      const textContent = document.createElement("div");
+      textContent.style.cssText = `
+        flex-grow: 1;
+        overflow: hidden;
+        white-space: nowrap;
+      `;
+
+      const indent = "&nbsp;&nbsp;".repeat(item.level);
+
+      const title = document.createElement("div");
+      title.innerHTML =
+        `${indent}` + (item.match && item.match.field === "title"
+          ? highlightText(item.bookmark.title || '', item.match.indices)
+          : (item.bookmark.title || ''));
+      title.style.cssText = `
+        font-weight: bold;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      `;
+      textContent.appendChild(title);
+
+      const url = document.createElement("div");
+      url.innerHTML =
+        `${indent}` + (item.match && item.match.field === "url"
+          ? highlightText(item.bookmark.url, item.match.indices)
+          : item.bookmark.url);
+      url.style.cssText = `
+        font-size: 0.8em;
+        color: #aaa;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      `;
+      textContent.appendChild(url);
+
+      const path = document.createElement("div");
+      path.innerHTML = `${indent}<span style="font-size: 0.7em; color: #888;">${item.match && item.match.field === "path" ? highlightText(String(item.path) || '', item.match.indices) : (String(item.path) || '')}</span>`;
+      path.style.cssText = `
+        overflow: hidden;
+        text-overflow: ellipsis;
+      `;
+      textContent.appendChild(path);
+
+      itemElement.appendChild(textContent);
+
+      itemElement.addEventListener("click", () => {
+        openBookmark(item.bookmark.url);
         removeOverlay();
       });
     } else {
@@ -439,6 +726,18 @@ function groupTab(groupId, groupName) {
 
 function removeTabFromGroup() {
   chrome.runtime.sendMessage({ action: "removeTabFromGroup" });
+}
+
+function addBookmark(parentId) {
+  chrome.runtime.sendMessage({ action: "addBookmark", parentId });
+}
+
+function removeBookmark() {
+  chrome.runtime.sendMessage({ action: "removeBookmark" });
+}
+
+function openBookmark(url) {
+  chrome.runtime.sendMessage({ action: "openBookmark", url });
 }
 
 function toggleOverlay(command) {
