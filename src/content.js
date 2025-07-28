@@ -425,6 +425,7 @@ function fuzzySearchAndDisplay(query, command) {
         match: null,
         isGroup: false,
       }));
+      // Prioritize the previously active tab if it exists and is not the current active tab
     } else {
       allTabs.forEach((tab) => {
         let match = null;
@@ -452,6 +453,19 @@ function fuzzySearchAndDisplay(query, command) {
       });
     }
     currentFilteredItems.sort((a, b) => a.tab.index - b.tab.index);
+    if (command === "toggle-fuzzy-finder" && previousTabId) {
+      const prevTab = currentFilteredItems.find(
+        (item) => item.tab.id === previousTabId,
+      );
+      if (prevTab) {
+        // Remove it from its current position
+        currentFilteredItems = currentFilteredItems.filter(
+          (item) => item.tab.id !== previousTabId,
+        );
+        // Add it to the beginning of the list
+        currentFilteredItems.unshift(prevTab);
+      }
+    }
   }
 
   filteredTabs = currentFilteredItems;
@@ -801,10 +815,13 @@ function openBookmark(url) {
   chrome.runtime.sendMessage({ action: "openBookmark", url });
 }
 
-function toggleOverlay(command) {
+let previousTabId = null;
+
+function toggleOverlay(command, prevTabId) {
   if (overlay) {
     overlay.removeOverlay();
   } else {
+    previousTabId = prevTabId; // Store the previous tab ID
     createOverlay(command);
   }
 }
@@ -812,6 +829,6 @@ function toggleOverlay(command) {
 // Listen for messages from background
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === "toggleFuzzyFinder") {
-    toggleOverlay(message.command);
+    toggleOverlay(message.command, message.previousTabId);
   }
 });

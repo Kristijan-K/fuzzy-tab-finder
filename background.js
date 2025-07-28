@@ -1,3 +1,19 @@
+let currentActiveTabId = null;
+let previousActiveTabId = null;
+
+// Initialize currentActiveTabId on startup
+chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+  if (tabs[0]) {
+    currentActiveTabId = tabs[0].id;
+  }
+});
+
+// Update tab IDs on activation
+chrome.tabs.onActivated.addListener((activeInfo) => {
+  previousActiveTabId = currentActiveTabId;
+  currentActiveTabId = activeInfo.tabId;
+});
+
 chrome.commands.onCommand.addListener((command) => {
   if (
     command === "toggle-fuzzy-finder" ||
@@ -7,9 +23,11 @@ chrome.commands.onCommand.addListener((command) => {
   ) {
     chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
       if (tabs[0]) {
+        // Send the actual previous tab ID
         chrome.tabs.sendMessage(tabs[0].id, {
           action: "toggleFuzzyFinder",
           command,
+          previousTabId: previousActiveTabId,
         });
       }
     });
