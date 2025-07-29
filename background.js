@@ -27,7 +27,6 @@ chrome.commands.onCommand.addListener((command) => {
         chrome.tabs.sendMessage(tabs[0].id, {
           action: "toggleFuzzyFinder",
           command,
-          previousTabId: previousActiveTabId,
         });
       }
     });
@@ -48,6 +47,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       new Promise((resolve) => chrome.tabs.query({}, resolve)),
       new Promise((resolve) => chrome.tabGroups.query({}, resolve)),
     ]).then(([tabs, tabGroups]) => {
+      // Sort tabs by lastAccessed in descending order
+      tabs.sort((a, b) => b.lastAccessed - a.lastAccessed);
       sendResponse({ tabs, tabGroups });
     });
     return true; // Indicates that sendResponse will be called asynchronously
@@ -56,6 +57,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       sendResponse({ bookmarkTreeNodes });
     });
     return true; // Indicates that sendResponse will be called asynchronously
+  } else if (message.action === "getCurrentTab") {
+    sendResponse({ tabId: currentActiveTabId });
+    return true;
   } else if (message.action === "addBookmark") {
     chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
       if (tabs[0]) {

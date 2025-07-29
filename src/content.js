@@ -110,13 +110,19 @@ function createOverlay(command) {
         acc[group.id] = group;
         return acc;
       }, {});
-      fuzzySearchAndDisplay("", activeCommand); // Display all tabs initially
+      chrome.runtime.sendMessage({ action: "getCurrentTab" }, (currentTabResponse) => {
+        const currentTabId = currentTabResponse.tabId;
+        fuzzySearchAndDisplay("", activeCommand, currentTabId); // Display all tabs initially
+      });
     });
   }
 
   // Input event listener for fuzzy searching
   input.addEventListener("input", (event) => {
-    fuzzySearchAndDisplay(event.target.value, activeCommand);
+    chrome.runtime.sendMessage({ action: "getCurrentTab" }, (currentTabResponse) => {
+      const currentTabId = currentTabResponse.tabId;
+      fuzzySearchAndDisplay(event.target.value, activeCommand, currentTabId);
+    });
   });
 
   // Store removeOverlay on overlay for external access
@@ -261,7 +267,7 @@ function fuzzyMatch(pattern, text) {
   }
 }
 
-function fuzzySearchAndDisplay(query, command) {
+function fuzzySearchAndDisplay(query, command, currentTabId) {
   const groups = Object.values(allTabGroups);
   let currentFilteredItems = [];
 
@@ -419,15 +425,15 @@ function fuzzySearchAndDisplay(query, command) {
     currentFilteredItems = buildDisplayList(allBookmarks, query, 0, "");
   } else {
     // toggle-fuzzy-finder
+    const tabsToFilter = allTabs.filter((tab) => tab.id !== currentTabId);
     if (!query) {
-      currentFilteredItems = allTabs.map((tab) => ({
+      currentFilteredItems = tabsToFilter.map((tab) => ({
         tab,
         match: null,
         isGroup: false,
       }));
-      // Prioritize the previously active tab if it exists and is not the current active tab
     } else {
-      allTabs.forEach((tab) => {
+      tabsToFilter.forEach((tab) => {
         let match = null;
         let matchedIndices = fuzzyMatch(query, tab.title);
         if (matchedIndices) {
@@ -451,20 +457,6 @@ function fuzzySearchAndDisplay(query, command) {
           }
         }
       });
-    }
-    currentFilteredItems.sort((a, b) => a.tab.index - b.tab.index);
-    if (command === "toggle-fuzzy-finder" && previousTabId) {
-      const prevTab = currentFilteredItems.find(
-        (item) => item.tab.id === previousTabId,
-      );
-      if (prevTab) {
-        // Remove it from its current position
-        currentFilteredItems = currentFilteredItems.filter(
-          (item) => item.tab.id !== previousTabId,
-        );
-        // Add it to the beginning of the list
-        currentFilteredItems.unshift(prevTab);
-      }
     }
   }
 
@@ -815,13 +807,10 @@ function openBookmark(url) {
   chrome.runtime.sendMessage({ action: "openBookmark", url });
 }
 
-let previousTabId = null;
-
-function toggleOverlay(command, prevTabId) {
+function toggleOverlay(command) {
   if (overlay) {
     overlay.removeOverlay();
   } else {
-    previousTabId = prevTabId; // Store the previous tab ID
     createOverlay(command);
   }
 }
@@ -829,6 +818,6 @@ function toggleOverlay(command, prevTabId) {
 // Listen for messages from background
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === "toggleFuzzyFinder") {
-    toggleOverlay(message.command, message.previousTabId);
+    toggleOverlay(message.command);
   }
 });
