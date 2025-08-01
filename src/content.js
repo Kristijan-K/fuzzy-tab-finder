@@ -110,19 +110,25 @@ function createOverlay(command) {
         acc[group.id] = group;
         return acc;
       }, {});
-      chrome.runtime.sendMessage({ action: "getCurrentTab" }, (currentTabResponse) => {
-        const currentTabId = currentTabResponse.tabId;
-        fuzzySearchAndDisplay("", activeCommand, currentTabId); // Display all tabs initially
-      });
+      chrome.runtime.sendMessage(
+        { action: "getCurrentTab" },
+        (currentTabResponse) => {
+          const currentTabId = currentTabResponse.tabId;
+          fuzzySearchAndDisplay("", activeCommand, currentTabId); // Display all tabs initially
+        },
+      );
     });
   }
 
   // Input event listener for fuzzy searching
   input.addEventListener("input", (event) => {
-    chrome.runtime.sendMessage({ action: "getCurrentTab" }, (currentTabResponse) => {
-      const currentTabId = currentTabResponse.tabId;
-      fuzzySearchAndDisplay(event.target.value, activeCommand, currentTabId);
-    });
+    chrome.runtime.sendMessage(
+      { action: "getCurrentTab" },
+      (currentTabResponse) => {
+        const currentTabId = currentTabResponse.tabId;
+        fuzzySearchAndDisplay(event.target.value, activeCommand, currentTabId);
+      },
+    );
   });
 
   // Store removeOverlay on overlay for external access
@@ -253,14 +259,24 @@ function fuzzyMatch(pattern, text) {
   const matchedIndices = [];
   let patternIdx = 0;
   let textIdx = 0;
+  let consecutiveMatches = 0;
+  let lastIndex = 0;
   while (patternIdx < pattern.length && textIdx < text.length) {
     if (pattern[patternIdx] === text[textIdx]) {
       matchedIndices.push(textIdx);
       patternIdx++;
+      if (textIdx - lastIndex === 1) {
+        consecutiveMatches++;
+      }
+      lastIndex = textIdx;
     }
     textIdx++;
   }
-  if (patternIdx === pattern.length) {
+  if (
+    patternIdx === pattern.length &&
+    ((pattern.length <= 2 && matchedIndices >= 0) ||
+      consecutiveMatches >= pattern.length - 1)
+  ) {
     return matchedIndices;
   } else {
     return null;
