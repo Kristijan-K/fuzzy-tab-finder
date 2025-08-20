@@ -254,8 +254,8 @@ function onKeyDown(event) {
 document.addEventListener("keydown", onKeyDown, true); // Registered once
 
 function fuzzyMatch(pattern, text) {
-  pattern = pattern.toLowerCase();
-  text = text.toLowerCase();
+  pattern = pattern.toLowerCase().replace(/ /g, "");
+  text = text.toLowerCase().replace(/[.\-_]/g, ' ');
   const matchedIndices = [];
   let patternIdx = 0;
   let textIdx = 0;
@@ -274,8 +274,8 @@ function fuzzyMatch(pattern, text) {
   }
   if (
     patternIdx === pattern.length &&
-    ((pattern.length <= 2 && matchedIndices >= 0) ||
-      consecutiveMatches >= pattern.length - 1)
+    // at least some consecutive characters are required for a good match
+    (pattern.length < 3 || consecutiveMatches > pattern.length / 4 || consecutiveMatches > 2)
   ) {
     return matchedIndices;
   } else {
