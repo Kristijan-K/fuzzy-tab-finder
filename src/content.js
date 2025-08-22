@@ -166,11 +166,36 @@ function onKeyDown(event) {
     if (event.key === "Escape") {
       removeOverlay();
     } else if (event.key === "ArrowDown") {
-      selectedIndex = Math.min(selectedIndex + 1, filteredTabs.length - 1);
-      highlightSelection();
+      if (activeCommand === "toggle-bookmark-opener") {
+        let nextIndex = selectedIndex + 1;
+        while (
+          nextIndex < filteredTabs.length &&
+          filteredTabs[nextIndex].isFolder
+        ) {
+          nextIndex++;
+        }
+        if (nextIndex < filteredTabs.length) {
+          selectedIndex = nextIndex;
+          highlightSelection();
+        }
+      } else {
+        selectedIndex = Math.min(selectedIndex + 1, filteredTabs.length - 1);
+        highlightSelection();
+      }
     } else if (event.key === "ArrowUp") {
-      selectedIndex = Math.max(selectedIndex - 1, 0);
-      highlightSelection();
+      if (activeCommand === "toggle-bookmark-opener") {
+        let prevIndex = selectedIndex - 1;
+        while (prevIndex >= 0 && filteredTabs[prevIndex].isFolder) {
+          prevIndex--;
+        }
+        if (prevIndex >= 0) {
+          selectedIndex = prevIndex;
+          highlightSelection();
+        }
+      } else {
+        selectedIndex = Math.max(selectedIndex - 1, 0);
+        highlightSelection();
+      }
     } else if (event.key === "ArrowRight") {
       if (
         activeCommand === "toggle-bookmark-opener" &&
