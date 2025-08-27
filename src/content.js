@@ -9,6 +9,12 @@ let previouslySelectedId = null; // To remember the last selected item
 let activeCommand = null; // New global variable to store the active command
 
 function createOverlay(command) {
+  // Check if we can create overlay on this page
+  if (!document.body || document.body.tagName.toLowerCase() !== 'body') {
+    console.warn("Cannot create overlay on this page - unsupported content");
+    return;
+  }
+
   // Remove existing overlay if any
   if (overlay) {
     overlay.remove();
@@ -856,9 +862,4 @@ function toggleOverlay(command) {
   }
 }
 
-// Listen for messages from background
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (message.action === "toggleFuzzyFinder") {
-    toggleOverlay(message.command);
-  }
-});
+// Message listener removed - now using popup instead of overlay

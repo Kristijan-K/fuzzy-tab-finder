@@ -21,30 +21,42 @@ chrome.commands.onCommand.addListener((command) => {
     command === "toggle-bookmark-finder" ||
     command === "toggle-bookmark-opener"
   ) {
-    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-      if (tabs[0]) {
-        // Send the actual previous tab ID
-        chrome.tabs.sendMessage(tabs[0].id, {
-          action: "toggleFuzzyFinder",
-          command,
-        });
-      }
+    // Close any existing popup windows first
+    chrome.windows.getAll({ windowTypes: ['popup'] }, (windows) => {
+      windows.forEach((window) => {
+        if (window.tabs && window.tabs[0] && window.tabs[0].url && window.tabs[0].url.includes('popup.html')) {
+          chrome.windows.remove(window.id);
+        }
+      });
+
+      // Get current tab and open new popup window with current tab ID
+      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+        if (tabs[0]) {
+          const currentTabId = tabs[0].id;
+          chrome.windows.getCurrent((currentWindow) => {
+            chrome.windows.create({
+              url: chrome.runtime.getURL('popup.html') + '?command=' + command + '&currentTabId=' + currentTabId,
+              type: 'popup',
+              width: 920,
+              height: 650,
+              left: currentWindow.left + (currentWindow.width - 920) / 2,
+              top: currentWindow.top + (currentWindow.height - 650) / 2
+            });
+          });
+        }
+      });
     });
   }
 });
 
-chrome.action.onClicked.addListener((tab) => {
-  if (tab.id) {
-    chrome.tabs.sendMessage(tab.id, { action: "toggleFuzzyFinder" });
-  }
-});
+
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === "activateTab") {
     chrome.tabs.update(message.tabId, { active: true });
   } else if (message.action === "getAllTabs") {
     Promise.all([
-      new Promise((resolve) => chrome.tabs.query({}, resolve)),
+      new Promise((resolve) => chrome.tabs.query({ windowType: 'normal' }, resolve)),
       new Promise((resolve) => chrome.tabGroups.query({}, resolve)),
     ]).then(([tabs, tabGroups]) => {
       // Sort tabs by lastAccessed in descending order
