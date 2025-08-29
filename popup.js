@@ -439,7 +439,7 @@ function displayResults(filteredItems, command) {
   const resultsContainer = document.getElementById('fuzzy-finder-results');
   resultsContainer.innerHTML = '';
 
-  if (filteredItems.length === 0 || (filteredItems.length === 1 && (filteredItems[0].isNewGroupOption || filteredItems[0].isRemoveBookmarkOption))) {
+  if (filteredItems.length === 0 || (filteredItems.length === 1 && (filteredItems[0].isNewGroupOption || (filteredItems[0].isRemoveBookmarkOption && command !== "toggle-bookmark-finder")))) {
     let message = "No matching items found.";
     if (command === "toggle-bookmark-finder") {
       message = "No matching bookmark folders found.";
